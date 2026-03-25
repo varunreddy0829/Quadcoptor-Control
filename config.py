@@ -22,14 +22,14 @@ HOW TO TUNE:
 """
 
 import numpy as np
-from scipy.linalg import solve_continuous_are
+from scipy.linalg import solve_discrete_are
 from scipy.signal import cont2discrete
 from sim.quadrotor import QuadrotorParams
 
 
 # ── Shared actuator limits [delta_T, tau_x, tau_y, tau_z] ────────────────────
-U_MIN = np.array([-3.0, -1.5, -0.5, -0.1])
-U_MAX = np.array([ 3.0,  1.5,  0.5,  0.1])
+U_MIN = np.array([-2.0, -1, -0.5, -0.1])
+U_MAX = np.array([ 2.0,  1,  0.5,  0.1])
 
 
 def _build_linearisation(params: QuadrotorParams) -> tuple:
@@ -38,18 +38,6 @@ def _build_linearisation(params: QuadrotorParams) -> tuple:
 
     state:  [x, y, z, vx, vy, vz, phi, theta, psi, p, q, r]
     input:  [delta_T, tau_x, tau_y, tau_z]
-
-    Small angle approximation at hover:
-      vx_dot ≈  g * theta
-      vy_dot ≈ -g * phi
-      vz_dot =  delta_T / m
-      p_dot  =  tau_x / Ixx
-      q_dot  =  tau_y / Iyy
-      r_dot  =  tau_z / Izz
-
-    Returns:
-        A_c : continuous-time state matrix  (12, 12)
-        B_c : continuous-time input matrix  (12, 4)
     """
     g   = params.g
     m   = params.mass
@@ -77,48 +65,32 @@ def _build_linearisation(params: QuadrotorParams) -> tuple:
 
 
 def get_pid_config(params: QuadrotorParams = None) -> dict:
-    """
-    Return PID controller configuration.
-
-    Returns:
-        dict with keys: Kp_pos, Ki_pos, Kp_vel, Ki_vel,
-                        Kp_att, Kd_att, max_tilt, max_integral,
-                        u_min, u_max
-    """
+    """Return PID controller configuration."""
     return {
-        # Position loop gains [x, y, z]
         'Kp_pos': np.array([1.5, 1.5, 2.0]),
         'Ki_pos': np.array([0.0, 0.0, 0.1]),
-
-        # Velocity loop gains [x, y, z]
         'Kp_vel': np.array([3.0, 3.0, 4.0]),
         'Ki_vel': np.array([0.1, 0.1, 0.2]),
-
-        # Attitude loop gains [phi, theta, psi]
         'Kp_att': np.array([10.0, 10.0, 2.0]),
         'Kd_att': np.array([ 1.0,  1.0, 0.5]),
-
-        # Safety limits
-        'max_tilt':     0.5,   # max tilt angle [rad] (~30 deg)
-        'max_integral': 5.0,   # anti-windup clamp
-
-        # Shared actuator limits
+        'max_tilt':     0.5,
+        'max_integral': 5.0,
         'u_min': U_MIN,
         'u_max': U_MAX,
     }
 
 
-def get_lqr_config(params: QuadrotorParams = None) -> dict:
+def get_lqr_config(params: QuadrotorParams = None, dt: float = 0.01) -> dict:
     """
-    Build and return LQR configuration.
-
-    Solves the continuous algebraic Riccati equation to get optimal K.
-
-    Returns:
-        dict with keys: A, B, K, Q, R, u_min, u_max
+    Build and return Discrete LQR configuration.
+    Solves the discrete algebraic Riccati equation to get optimal K.
     """
     params = params or QuadrotorParams()
     A_c, B_c = _build_linearisation(params)
+
+    # 1. Discretise the system (Zero-Order Hold)
+    sys_d = cont2discrete((A_c, B_c, np.eye(12), np.zeros((12,4))), dt, method='zoh')
+    A_d, B_d = sys_d[0], sys_d[1]
 
     # Q: penalise state error [x,y,z, vx,vy,vz, phi,theta,psi, p,q,r]
     q_diag = np.array([
@@ -128,20 +100,52 @@ def get_lqr_config(params: QuadrotorParams = None) -> dict:
          1,  1,  1    # body rates
     ])
     Q = np.diag(q_diag)
-
-    # R: penalise virtual input effort [delta_T, tau_x, tau_y, tau_z]
     R = np.diag([0.1, 0.8, 0.8, 0.8])
 
-    # Solve CARE → optimal gain matrix K
-    P = solve_continuous_are(A_c, B_c, Q, R)
-    K = np.linalg.inv(R) @ B_c.T @ P
+    # 2. Solve DARE to get the optimal cost-to-go matrix P
+    P = solve_discrete_are(A_d, B_d, Q, R)
+    
+    # 3. Compute the discrete optimal gain matrix K
+    K = np.linalg.inv(R + B_d.T @ P @ B_d) @ (B_d.T @ P @ A_d)
 
     return {
-        'A':     A_c,
-        'B':     B_c,
+        'A':     A_d,
+        'B':     B_d,
         'K':     K,
         'Q':     Q,
         'R':     R,
+        'u_min': U_MIN,
+        'u_max': U_MAX,
+    }
+
+
+def get_mpc_config(params: QuadrotorParams = None, dt: float = 0.01) -> dict:
+    """
+    Build and return MPC configuration, including discretised dynamics.
+    """
+    params = params or QuadrotorParams()
+    A_c, B_c = _build_linearisation(params)
+    
+    # Discretise the system (Zero-Order Hold)
+    sys_d = cont2discrete((A_c, B_c, np.eye(12), np.zeros((12,4))), dt, method='zoh')
+    A_d, B_d = sys_d[0], sys_d[1]
+    
+    # Q and R weights - tuned slightly more aggressively than LQR
+    q_diag = np.array([
+        150, 150, 250,   # position (x, y, z)
+         10,  10,  10,   # velocity (vx, vy, vz)
+        20, 20, 20,   # orientation (phi, theta, psi)
+         1,  1,  1    # body rates (p, q, r)
+    ])
+    Q = np.diag(q_diag)
+    R = np.diag([0.1, 0.1, 0.1, 0.1])
+    
+    return {
+        'Ad':    A_d,
+        'Bd':    B_d,
+        'Q':     Q,
+        'R':     R,
+        'N':     30,    # Prediction horizon (20 steps @ 0.01s = 0.2s lookahead)
         'u_min': U_MIN,
         'u_max': U_MAX,
     }

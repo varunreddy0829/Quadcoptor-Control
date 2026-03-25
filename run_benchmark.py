@@ -1,8 +1,8 @@
 """
 ================================================================================
- Controller Benchmark — PID vs LQR
+ Controller Benchmark — PID vs LQR vs MPC
 ================================================================================
-Runs both controllers on the same helix trajectory under identical
+Runs all three controllers on the same helix trajectory under identical
 wind conditions (fixed random seed). All parameters from config.py.
 
 Usage: python run_benchmark.py
@@ -18,7 +18,8 @@ from sim.quadrotor import QuadrotorDynamics, QuadrotorParams
 from trajectories.helix import HelixTrajectory
 from controllers.pid import PIDController
 from controllers.lqr import LQRController
-from config import get_pid_config, get_lqr_config
+from controllers.mpc import MPCController
+from config import get_pid_config, get_lqr_config, get_mpc_config
 
 # ── Global settings ───────────────────────────────────────────────────────────
 RANDOM_SEED  = 42
@@ -51,6 +52,7 @@ def run_simulation(controller, traj, params, dt, label):
         ref   = traj.get_reference(t)
         accel = traj.get_acceleration(t)
 
+        # LQR needs explicit feedforward passed in; MPC pulls it directly from traj
         if isinstance(controller, LQRController):
             forces = controller.compute_forces(state, ref, t, accel_ref=accel)
         else:
@@ -69,14 +71,17 @@ params  = QuadrotorParams()
 traj    = HelixTrajectory()
 
 pid_cfg = get_pid_config(params=params)
-lqr_cfg = get_lqr_config(params=params)
+lqr_cfg = get_lqr_config(params=params, dt=DT)
+mpc_cfg = get_mpc_config(params=params, dt=DT)
 
 pid = PIDController(cfg=pid_cfg, params=params, dt=DT)
 lqr = LQRController(cfg=lqr_cfg, params=params, dt=DT)
+mpc = MPCController(cfg=mpc_cfg, params=params, dt=DT, traj=traj)
 
 controllers = [
     (pid, "PID", "tab:blue"),
     (lqr, "LQR", "tab:orange"),
+    (mpc, "MPC", "tab:green"),
 ]
 
 # ── Run all ───────────────────────────────────────────────────────────────────
@@ -90,6 +95,7 @@ for ctrl, label, color in controllers:
     run_simulation(ctrl, traj, params, DT, label)
 
 # ── Summary table ─────────────────────────────────────────────────────────────
+num_ctrls = len(controllers)
 print(f"\n{'─'*52}")
 print(f"{'Controller':<12} {'RMSE (m)':<14} {'Control Effort':<16}")
 print(f"{'─'*52}")
@@ -98,7 +104,8 @@ for ctrl, label, _ in controllers:
 print(f"{'─'*52}\n")
 
 # ── Figure 1: 3D trajectories ─────────────────────────────────────────────────
-fig1 = plt.figure(figsize=(12, 5))
+# Widened figsize from 12 to 18 to fit the 3rd subplot cleanly
+fig1 = plt.figure(figsize=(18, 5))
 fig1.suptitle(
     f"3D Trajectory Comparison  |  Wind={'ON' if WIND_ENABLED else 'OFF'}"
     f"  |  Seed={RANDOM_SEED}", fontsize=13)
@@ -106,7 +113,9 @@ fig1.suptitle(
 for idx, (ctrl, label, color) in enumerate(controllers):
     states = np.array(ctrl.state_history)
     refs   = np.array(ctrl.ref_history)
-    ax = fig1.add_subplot(1, 2, idx + 1, projection='3d')
+    
+    # Dynamically scale grid to number of controllers (1 row, N columns)
+    ax = fig1.add_subplot(1, num_ctrls, idx + 1, projection='3d')
     ax.plot(refs[:,0], refs[:,1], refs[:,2], 'g--', linewidth=1,
             label='reference', alpha=0.7)
     ax.plot(states[:,0], states[:,1], states[:,2], color=color,
@@ -136,7 +145,8 @@ plt.tight_layout()
 plt.savefig('results/benchmark_error.png', dpi=150)
 
 # ── Figure 3: Rotor forces grid ───────────────────────────────────────────────
-fig3, axs = plt.subplots(2, 4, figsize=(18, 7))
+# Dynamically scale rows based on number of controllers
+fig3, axs = plt.subplots(num_ctrls, 4, figsize=(18, 3.5 * num_ctrls))
 fig3.suptitle('Rotor Forces Comparison', fontsize=13)
 motor_labels = ['Front-Left (f1)', 'Back-Left (f2)',
                 'Back-Right (f3)', 'Front-Right (f4)']
@@ -151,7 +161,8 @@ for row, (ctrl, label, color) in enumerate(controllers):
         axs[row, col].grid(True, alpha=0.3)
         if row == 0: axs[row, col].set_title(motor_labels[col])
         if col == 0: axs[row, col].set_ylabel(f'{label}\nForce [N]')
-        if row == 1: axs[row, col].set_xlabel('Time [s]')
+        # Only put X-axis label on the very bottom row
+        if row == num_ctrls - 1: axs[row, col].set_xlabel('Time [s]')
 
 plt.tight_layout()
 plt.savefig('results/benchmark_forces.png', dpi=150)
