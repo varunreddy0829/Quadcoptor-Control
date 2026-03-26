@@ -1,7 +1,7 @@
 # Multi-Controller Quadrotor Trajectory Tracking
 **PID vs. Discrete-Time LQR vs. Constrained MPC**
 
-This repository provides a high-fidelity benchmarking suite for a 12-DOF non-linear quadrotor system. It compares three distinct control architectures—Cascaded PID, Discrete-Time LQR, and Model Predictive Control (MPC)—across complex 3D trajectories (Helix and Lemniscate) under both ideal and stochastic wind conditions.
+This repository provides a high-fidelity benchmarking suite for a 12-DOF non-linear quadrotor system. It compares three distinct control architectures—Cascaded PID, Discrete-Time LQR, and Model Predictive Control (MPC)—across two complex 3D trajectories: Helix and Lemniscate, under both ideal and stochastic wind conditions.
 
 ---
 
@@ -96,15 +96,15 @@ $$x_{k+1} = A_d x_k + B_d u_k$$
 
 ---
 
-## 4. Getting Started
+## 4. How to clone and run this repository on your PC
 
 ### Installation
 
 Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/quadrotor-tracking-benchmark.git
-cd quadrotor-tracking-benchmark
+git clone https://github.com/varunreddy0829/Quadcoptor-Control.git
+cd Quadcoptor-Control
 ```
 
 Install dependencies:
