@@ -92,6 +92,7 @@ $$x_{k+1} = A_d x_k + B_d u_k$$
 │   └── wind.py          # Gauss-Markov stochastic wind model
 ├── config.py            # Centralized hyperparameter and weighting management
 └── run_benchmark.py     # Automated test-suite and visualization generator
+```
 
 ---
 
