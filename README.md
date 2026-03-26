@@ -3,6 +3,8 @@
 
 This repository provides a high-fidelity benchmarking suite for a 12-DOF non-linear quadrotor system. It compares three distinct control architectures—Cascaded PID, Discrete-Time LQR, and Model Predictive Control (MPC)—across complex 3D trajectories (Helix and Lemniscate) under both ideal and stochastic wind conditions.
 
+---
+
 ## 1. Benchmarking Results
 
 The suite executes four standardized test cases to evaluate tracking precision (RMSE) and efficiency (Control Effort). 
@@ -24,11 +26,34 @@ The suite executes four standardized test cases to evaluate tracking precision (
 | | PID | 0.4390 | 22,084 |
 
 ### Visual Analysis
-![Helix Tracking Comparison](results/images/Helix_NoWind_3d.png)
-*Figure 1: 3D Trajectory Comparison. The MPC (Green) achieves sub-2cm tracking by proactively planning for curvature via its 0.3s prediction horizon.*
 
-![Position Error Over Time](results/images/Lemn_Windy_error.png)
-*Figure 2: Tracking error during the Lemniscate (Figure-8) task under stochastic wind. MPC maintains significantly higher stability during rapid roll/pitch reversals.*
+#### Case 1: Helix Trajectory (No Wind)
+| 3D Path | Tracking Error |
+| :---: | :---: |
+| ![Helix_NoWind_3d](results/images/Helix_NoWind_3d.png) | ![Helix_NoWind_error](results/images/Helix_NoWind_error.png) |
+| **Rotor Forces** | **Benchmark Summary** |
+| ![Helix_NoWind_forces](results/images/Helix_NoWind_forces.png) | ![Helix_NoWind_summary](results/images/Helix_NoWind_summary.png) |
+
+#### Case 2: Helix Trajectory (Stochastic Wind)
+| 3D Path | Tracking Error |
+| :---: | :---: |
+| ![Helix_Windy_3d](results/images/Helix_Windy_3d.png) | ![Helix_Windy_error](results/images/Helix_Windy_error.png) |
+| **Rotor Forces** | **Benchmark Summary** |
+| ![Helix_Windy_forces](results/images/Helix_Windy_forces.png) | ![Helix_Windy_summary](results/images/Helix_Windy_summary.png) |
+
+#### Case 3: Lemniscate Trajectory (No Wind)
+| 3D Path | Tracking Error |
+| :---: | :---: |
+| ![Lemn_NoWind_3d](results/images/Lemn_NoWind_3d.png) | ![Lemn_NoWind_error](results/images/Lemn_NoWind_error.png) |
+| **Rotor Forces** | **Benchmark Summary** |
+| ![Lemn_NoWind_forces](results/images/Lemn_NoWind_forces.png) | ![Lemn_NoWind_summary](results/images/Lemn_NoWind_summary.png) |
+
+#### Case 4: Lemniscate Trajectory (Stochastic Wind)
+| 3D Path | Tracking Error |
+| :---: | :---: |
+| ![Lemn_Windy_3d](results/images/Lemn_Windy_3d.png) | ![Lemn_Windy_error](results/images/Lemn_Windy_error.png) |
+| **Rotor Forces** | **Benchmark Summary** |
+| ![Lemn_Windy_forces](results/images/Lemn_Windy_forces.png) | ![Lemn_Windy_summary](results/images/Lemn_Windy_summary.png) |
 
 ---
 
@@ -41,7 +66,7 @@ The translational dynamics follow:
 $$\ddot{p} = \frac{1}{m} R(\eta) F_{thrust} - \begin{bmatrix} 0 \\ 0 \\ g \end{bmatrix} + \frac{1}{m} F_{wind}$$
 
 ### Linearized Model & Discretization
-For LQR and MPC synthesis, the system is linearized at a stable hover equilibrium ($ \phi, \theta \approx 0$). To bridge the gap between continuous physics and digital control, we apply **Zero-Order Hold (ZOH) discretization** to the state-space matrices ($A_c, B_c$) at a 100Hz control frequency:
+For LQR and MPC synthesis, the system is linearized at a stable hover equilibrium ($\phi, \theta \approx 0$). To bridge the gap between continuous physics and digital control, we apply **Zero-Order Hold (ZOH) discretization** to the state-space matrices ($A_c, B_c$) at a 100Hz control frequency:
 $$x_{k+1} = A_d x_k + B_d u_k$$
 
 ### Controller Architecture
@@ -52,8 +77,6 @@ $$x_{k+1} = A_d x_k + B_d u_k$$
 ---
 
 ## 3. Repository Architecture
-
-The codebase is organized to support modularity and easy integration with physics simulators like NVIDIA Isaac Sim or Gazebo.
 
 ```text
 ├── controllers/
