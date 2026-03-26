@@ -92,3 +92,48 @@ $$x_{k+1} = A_d x_k + B_d u_k$$
 │   └── wind.py          # Gauss-Markov stochastic wind model
 ├── config.py            # Centralized hyperparameter and weighting management
 └── run_benchmark.py     # Automated test-suite and visualization generator
+
+---
+
+## 4. Getting Started
+
+### Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/quadrotor-tracking-benchmark.git
+cd quadrotor-tracking-benchmark
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+### Running the Benchmark Matrix
+
+To execute the full matrix of 4 test cases (Helix/Lemniscate x Wind On/Off) and generate all visual reports:
+
+```bash
+python run_benchmark.py
+```
+
+This script will cycle through the experiment matrix and automatically populate the `results/` directory with 16 analytical plots and a structured `benchmark_results.yaml` file.
+
+---
+
+## 5. Technical Challenges & Lessons Learned
+
+### The Horizon Trade-off (N)
+
+One of the primary challenges was tuning the MPC prediction horizon. While a longer horizon theoretically improves foresight, setting `N=50` (0.5s) led to solver "infeasibility" crashes. This was due to the divergence between the linearized internal model and the true non-linear dynamics over long durations. 
+
+Through empirical testing, `N=30` (0.3s) was found to be the "Goldilocks" zone—providing enough foresight to "pre-bank" for turns while remaining computationally feasible for a 100Hz real-time loop.
+
+### Disturbance Rejection vs. Steady-State Error
+
+Under steady wind conditions, the linear MPC initially exhibited a position offset. Unlike the PID controller, which utilizes an Integral (I) term to bias the output, the MPC required careful tuning of the **Q** (State Penalty) and **R** (Input Penalty) matrices to prioritize position tracking over control economy. 
+
+By decreasing the R weights for rotor force deviations, the MPC became more aggressive in fighting external disturbances, successfully reducing RMSE by over 50% compared to initial iterations.
